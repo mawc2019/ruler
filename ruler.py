@@ -6,18 +6,18 @@ class morph:
         
         self.Lx = Lx
         self.Ly = Ly
-        self.proj_strength = proj_strength
+        self.proj_strength = proj_strength # This is a parameter for the functions heaviside_erosion and heaviside_dilation
         
     def cylindrical_filter(self,arr,radius):
         
         (Nx,Ny) = arr.shape
-        # Formulate grid over entire design region
+        # Construct the grid over the entire design region
         xv, yv = np.meshgrid(np.linspace(-self.Lx/2,self.Lx/2,Nx), np.linspace(-self.Ly/2,self.Ly/2,Ny), sparse=True, indexing='ij')
 
-        # Calculate kernel
+        # Calculate the kernel
         kernel = np.where(np.abs(xv ** 2 + yv ** 2) <= radius**2,1,0)#.T
 
-        # Normalize kernel
+        # Normalize the kernel
         kernel = kernel / np.sum(kernel.flatten()) # Normalize the filter
 
         # Filter the response
@@ -29,7 +29,7 @@ class morph:
         
         (Nx,Ny) = arr.shape
         beta = self.proj_strength
-        arr_hat = self.cylindrical_filter(arr,radius)#.flatten()
+        arr_hat = self.cylindrical_filter(arr,radius)
         
         return np.exp(-beta*(1-arr_hat)) + np.exp(-beta)*(1-arr_hat)
 
@@ -37,35 +37,35 @@ class morph:
         
         (Nx,Ny) = arr.shape
         beta = self.proj_strength
-        arr_hat = self.cylindrical_filter(arr,radius)#.flatten()
+        arr_hat = self.cylindrical_filter(arr,radius)
         
         return 1 - np.exp(-beta*arr_hat) + np.exp(-beta)*arr_hat
     
     def open_operator(self,arr,radius):
-        
+        # erosion and then dilation
         he = self.heaviside_erosion(arr,radius)
         hdhe = self.heaviside_dilation(he,radius)
         
         return hdhe
     
     def close_operator(self,arr,radius):
-        
+        # dilation and then erosion
         hd = self.heaviside_dilation(arr,radius)
         hehd = self.heaviside_erosion(hd,radius)
         
         return hehd
     
-    def minimum_length(self,arr,len_arr): # search the minimum length scale of an image "arr" within a length array "len_arr"
+    def minimum_length(self,arr,len_arr): # search the minimum length scale of a design "arr" within a length array "len_arr"
         
         radius_list = sorted(list(np.abs(len_arr)/2))
         for radius in radius_list:
-            diff_image = np.abs(self.open_operator(arr,radius)-self.close_operator(arr,radius))
+            diff_image = np.abs(self.open_operator(arr,radius)-self.close_operator(arr,radius)) # difference between open and close operations
             pixel_ex,pixel_in = pixel_count(diff_image,threshold=0.5)
             if pixel_in>0:
                 print("The minimum length scale is ",radius*2)
                 return radius*2
             
-        print("The minimum length scale is not within this array of lengths.")
+        print("The minimum length scale is not in this array of lengths.")
         return
 
 
@@ -163,4 +163,4 @@ def pixel_count(arr,threshold):
                     if arr[ii-1,jj]>threshold and arr[ii+1,jj]>threshold and arr[ii,jj-1]>threshold and arr[ii,jj+1]>threshold:
                         pixel_int += 1
 
-    return pixel_tot-pixel_int,pixel_int # numbers of exterior and interior pixels
+    return pixel_tot-pixel_int,pixel_int # numbers of exterior and interior pixels with values above the threshold
