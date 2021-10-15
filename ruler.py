@@ -60,7 +60,7 @@ class morph:
         radius_list = sorted(list(np.abs(len_arr)/2))
         for radius in radius_list:
             diff_image = np.abs(self.open_operator(arr,radius)-self.close_operator(arr,radius)) # difference between open and close operations
-            pixel_ex,pixel_in = pixel_count(diff_image,threshold=0.5)
+            pixel_in = in_pixel_count(diff_image,threshold=0.5)
             if pixel_in>0:
                 print("The minimum length scale is ",radius*2)
                 return radius*2
@@ -153,8 +153,17 @@ def _zero_pad(arr, pad):
     
     return out
 
-def pixel_count(arr,threshold):
-    pixel_tot,pixel_int = 0,0 # total number of pixels with values above the threshold, and the number of interior pixels
+def in_pixel_count(arr,threshold): # if the value of a pixel exceeds the threshold, it is regarded as nonzero
+    pixel_int = 0 # number of interior pixels with nonzero values
+    for ii in range(1,arr.shape[0]-1):
+        for jj in range(1,arr.shape[1]-1):
+            if arr[ii-1,jj]>threshold and arr[ii+1,jj]>threshold and arr[ii,jj-1]>threshold and arr[ii,jj+1]>threshold:
+                pixel_int += 1
+
+    return pixel_int # numbers of interior pixels with nonzero values
+
+def pixel_count(arr,threshold): # if the value of a pixel exceeds the threshold, it is regarded as nonzero
+    pixel_tot,pixel_int = 0,0 # number of pixels with nonzero values, and among which the number of interior pixels
     for ii in range(arr.shape[0]):
         for jj in range(arr.shape[1]):
             if arr[ii,jj]>threshold:
@@ -163,4 +172,4 @@ def pixel_count(arr,threshold):
                     if arr[ii-1,jj]>threshold and arr[ii+1,jj]>threshold and arr[ii,jj-1]>threshold and arr[ii,jj+1]>threshold:
                         pixel_int += 1
 
-    return pixel_tot-pixel_int,pixel_int # numbers of exterior and interior pixels with values above the threshold
+    return pixel_tot-pixel_int,pixel_int # numbers of exterior and interior pixels with nonzero values
