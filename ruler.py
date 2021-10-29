@@ -55,19 +55,45 @@ class morph:
         
         return hehd
     
-    def minimum_length(self,arr,len_arr): # search the minimum length scale of a design "arr" within a length array "len_arr"
-        
-        radius_list = sorted(list(np.abs(len_arr)/2))
-        for radius in radius_list:
-            diff_image = np.abs(self.open_operator(arr,radius)-self.close_operator(arr,radius)) # difference between open and close operations
-            pixel_in = in_pixel_count(diff_image,threshold=0.5)
-            if pixel_in>0:
-                print("The minimum length scale is ",radius*2)
-                return radius*2
-            
-        print("The minimum length scale is not in this array of lengths.")
-        return
+    def minimum_length(self,arr,len_arr=None):
+        arr = binarize(arr,0.5)
+        if np.array(len_arr).any(): # search the minimum length scale within a length array "len_arr"
+            radius_list = sorted(list(np.abs(len_arr)/2))
+            for radius in radius_list:
+                diff_image = np.abs(self.open_operator(arr,radius)-self.close_operator(arr,radius)) # difference between open and close
+                pixel_in = in_pixel_count(diff_image,threshold=0.5)
+                if pixel_in>0:
+                    print("The minimum length scale is ",radius*2)
+                    return radius*2
 
+            print("The minimum length scale is not in this array of lengths.")
+            return
+        else: # find the minimum length scale via binary search if "len_arr" is not provided
+            radius_ub = min(self.Lx,self.Ly)/2
+            diff_image_ub = np.abs(self.open_operator(arr,radius_ub)-self.close_operator(arr,radius_ub)) # difference between open and close
+            pixel_in_ub = in_pixel_count(diff_image_ub,threshold=0.5)
+            (Nx,Ny) = arr.shape
+            
+            if pixel_in_ub>0:
+                radii = [0,radius_ub/2,radius_ub]
+                while np.abs(radii[0]-radii[2])>min(self.Lx/Nx,self.Ly/Ny)/2:
+                    radius = radii[1]
+                    diff_image = np.abs(self.open_operator(arr,radius)-self.close_operator(arr,radius)) # difference between open and close
+                    pixel_in = in_pixel_count(diff_image,threshold=0.5)
+                    if pixel_in==0: radii[0],radii[1] = radius,(radius+radii[2])/2
+                    else: radii[1],radii[2] = (radius+radii[0])/2,radius
+                
+                print("The minimum length scale is ",radii[1]*2)
+                return radii[1]*2
+            else:
+                print("The minimum length scale is at least ", radius_ub*2)
+                return
+            
+
+def binarize(arr,demarcation):
+    arr_normalized = (arr-min(arr.flatten()))/(max(arr.flatten())-min(arr.flatten())) # normalize the data of the image
+    arr_binarized = np.sign(arr_normalized-demarcation)/2+0.5 # binarize the data of the image with the threshold 0.5
+    return arr_binarized
 
 def simple_2d_filter(arr,kernel,Nx,Ny):
     # Get 2d parameter space shape
