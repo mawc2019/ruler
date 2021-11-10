@@ -82,8 +82,7 @@ class morph:
                     pixel_in = in_pixel_count(diff_image,threshold=0.5)
                     if pixel_in==0: radii[0],radii[1] = radius,(radius+radii[2])/2
                     else: radii[1],radii[2] = (radius+radii[0])/2,radius
-                
-                print("The minimum length scale is ",radii[1]*2)
+
                 return radii[1]*2
             else:
                 print("The minimum length scale is at least ", radius_ub*2)
