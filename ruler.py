@@ -2,7 +2,7 @@ import numpy as np
 # Some code is copied or adapted from the Meep code at https://github.com/smartalecH/meep/blob/jax_rebase/python/adjoint/filters.py 
 
 class morph:
-    def __init__(self,size,margin_size=np.ones((2,2)),proj_strength=10**6):
+    def __init__(self,size,margin_size=np.zeros((2,2)),proj_strength=10**6):
         self.size = size # physical size in the row and column directions
         self.margin_size = np.reshape(margin_size,(2,2)) # widths of marginal regions to be ignored
         #the first and second elements correspond to the top and bottom, and the third and fourth elements correspond to the left and right
