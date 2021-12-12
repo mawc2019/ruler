@@ -2,17 +2,16 @@ import numpy as np
 # Some code is copied or adapted from the Meep code at https://github.com/smartalecH/meep/blob/jax_rebase/python/adjoint/filters.py 
 
 class morph:
-    def __init__(self,Lx,Ly,proj_strength=10**6):
-        
-        self.Lx = Lx
-        self.Ly = Ly
+    def __init__(self,size,margin_size=np.ones((2,2)),proj_strength=10**6):
+        self.size = size # physical size in the row and column directions
+        self.margin_size = np.reshape(margin_size,(2,2)) # widths of marginal regions to be ignored
+        #the first and second elements correspond to the top and bottom, and the third and fourth elements correspond to the left and right
         self.proj_strength = proj_strength # This is a parameter for the functions heaviside_erosion and heaviside_dilation
         
     def cylindrical_filter(self,arr,radius):
-        
-        (Nx,Ny) = arr.shape
         # Construct the grid over the entire design region
-        xv, yv = np.meshgrid(np.linspace(-self.Lx/2,self.Lx/2,Nx), np.linspace(-self.Ly/2,self.Ly/2,Ny), sparse=True, indexing='ij')
+        xv, yv = np.meshgrid(np.linspace(
+            -self.size[0]/2,self.size[0]/2,arr.shape[0]), np.linspace(-self.size[1]/2,self.size[1]/2,arr.shape[1]), sparse=True, indexing='ij')
 
         # Calculate the kernel
         kernel = np.where(np.abs(xv ** 2 + yv ** 2) <= radius**2,1,0)#.T
@@ -21,21 +20,19 @@ class morph:
         kernel = kernel / np.sum(kernel.flatten()) # Normalize the filter
 
         # Filter the response
-        arr_out = simple_2d_filter(arr,kernel,Nx,Ny)
+        arr_out = simple_2d_filter(arr,kernel,arr.shape[0],arr.shape[1])
 
         return arr_out
     
     def heaviside_erosion(self,arr,radius):
-        
-        (Nx,Ny) = arr.shape
+
         beta = self.proj_strength
         arr_hat = self.cylindrical_filter(arr,radius)
         
         return np.exp(-beta*(1-arr_hat)) + np.exp(-beta)*(1-arr_hat)
 
     def heaviside_dilation(self,arr,radius):
-        
-        (Nx,Ny) = arr.shape
+
         beta = self.proj_strength
         arr_hat = self.cylindrical_filter(arr,radius)
         
@@ -55,13 +52,30 @@ class morph:
         
         return hehd
     
+    def margin(self,arr): # compute the numbers of pixels corresponding to the marginal widths
+        margin_number = np.round(np.vstack((self.margin_size[0,:]/self.size[0]*arr.shape[0],self.margin_size[1,:]/self.size[1]*arr.shape[1])))
+        if np.sum(margin_number[0,:])+3>arr.shape[0] or np.sum(margin_number[1,:])+3>arr.shape[1]:
+            raise ValueError("Too wide margin or too narrow design region!")
+
+        for ii in range(margin_number.shape[0]):
+            for jj in range(margin_number.shape[1]):
+                if margin_number[ii,jj]==0:
+                    margin_number[ii,jj] = 1
+                if margin_number[ii,jj]<0:
+                    raise ValueError("Margin widths should be positive!")
+
+        return margin_number.astype(int)
+        
+    
     def minimum_length(self,arr,len_arr=None):
-        arr = binarize(arr,0.5)
+        arr = binarize(arr)
+        margin_number = self.margin(arr)
+
         if np.array(len_arr).any(): # search the minimum length scale within a length array "len_arr"
             radius_list = sorted(list(np.abs(len_arr)/2))
             for radius in radius_list:
                 diff_image = np.abs(self.open_operator(arr,radius)-self.close_operator(arr,radius)) # difference between open and close
-                pixel_in = in_pixel_count(diff_image,threshold=0.5)
+                pixel_in = in_pixel_count(diff_image,margin_number=margin_number)
                 if pixel_in>0:
                     print("The minimum length scale is ",radius*2)
                     return radius*2
@@ -69,17 +83,16 @@ class morph:
             print("The minimum length scale is not in this array of lengths.")
             return
         else: # find the minimum length scale via binary search if "len_arr" is not provided
-            radius_ub = min(self.Lx,self.Ly)/2
+            radius_ub = min(self.size[0],self.size[1])/2 # largest meaningful radius of open and close operations
             diff_image_ub = np.abs(self.open_operator(arr,radius_ub)-self.close_operator(arr,radius_ub)) # difference between open and close
-            pixel_in_ub = in_pixel_count(diff_image_ub,threshold=0.5)
-            (Nx,Ny) = arr.shape
+            pixel_in_ub = in_pixel_count(diff_image_ub,margin_number=margin_number)
             
             if pixel_in_ub>0:
                 radii = [0,radius_ub/2,radius_ub]
-                while np.abs(radii[0]-radii[2])>min(self.Lx/Nx,self.Ly/Ny)/2:
+                while np.abs(radii[0]-radii[2])>min(np.array(self.size)/np.array(arr.shape))/2:
                     radius = radii[1]
                     diff_image = np.abs(self.open_operator(arr,radius)-self.close_operator(arr,radius)) # difference between open and close
-                    pixel_in = in_pixel_count(diff_image,threshold=0.5)
+                    pixel_in = in_pixel_count(diff_image,margin_number=margin_number)
                     if pixel_in==0: radii[0],radii[1] = radius,(radius+radii[2])/2
                     else: radii[1],radii[2] = (radius+radii[0])/2,radius
 
@@ -89,7 +102,7 @@ class morph:
                 return
             
 
-def binarize(arr,demarcation):
+def binarize(arr,demarcation=0.5):
     arr_normalized = (arr-min(arr.flatten()))/(max(arr.flatten())-min(arr.flatten())) # normalize the data of the image
     arr_binarized = np.sign(arr_normalized-demarcation)/2+0.5 # binarize the data of the image with the threshold 0.5
     return arr_binarized
@@ -178,10 +191,11 @@ def _zero_pad(arr, pad):
     
     return out
 
-def in_pixel_count(arr,threshold): # if the value of a pixel exceeds the threshold, it is regarded as nonzero
+def in_pixel_count(arr,margin_number=np.ones((2,2),dtype=int),threshold=0.5):
+    # if the value of a pixel exceeds the threshold, it is regarded as nonzero
     pixel_int = 0 # number of interior pixels with nonzero values
-    for ii in range(1,arr.shape[0]-1):
-        for jj in range(1,arr.shape[1]-1):
+    for ii in range(margin_number[0,0],arr.shape[0]-margin_number[0,1]):
+        for jj in range(margin_number[1,0],arr.shape[1]-margin_number[1,1]):
             if arr[ii-1,jj]>threshold and arr[ii+1,jj]>threshold and arr[ii,jj-1]>threshold and arr[ii,jj+1]>threshold:
                 pixel_int += 1
 
