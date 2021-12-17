@@ -5,7 +5,7 @@ class morph:
     def __init__(self,size,margin_size=np.zeros((2,2)),proj_strength=10**6):
         self.size = size # physical size in the row and column directions
         self.margin_size = np.reshape(margin_size,(2,2)) # widths of marginal regions to be ignored
-        #the first and second elements correspond to the top and bottom, and the third and fourth elements correspond to the left and right
+        #in margin_size, the two elements in the first row correspond to the top and bottom, and the two elements in the second row correspond to the left and right
         self.proj_strength = proj_strength # This is a parameter for the functions heaviside_erosion and heaviside_dilation
         
     def cylindrical_filter(self,arr,radius):
